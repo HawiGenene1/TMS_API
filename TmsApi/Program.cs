@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
+using TmsApi.Service;
+using TmsApi.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,6 +8,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication("Training")
     .AddScheme<AuthenticationSchemeOptions, TrainingAuthHandler>("Training", null);
 builder.Services.AddAuthorization();
+
+builder.Services.AddSingleton<EnrollmentWorker>();
+
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+
+builder.Services.AddOptions<PaymentOptions>()
+    .BindConfiguration("Payments")
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+    
+
+
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
 
 var app = builder.Build();
 
@@ -24,5 +43,11 @@ app.MapGet("/api/assessments/results", () => Results.Ok(new
     studentId = "S-001",
     letterGrade = "A"
 })).RequireAuthorization();
+
+app.MapGet("/api/enrollments/worker-smoke", (EnrollmentWorker worker) =>
+{
+    worker.ProcessBatch();
+    return Results.Ok("processed");
+});
 
 app.Run();
