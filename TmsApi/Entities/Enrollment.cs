@@ -9,7 +9,13 @@ public class Enrollment
     public int CourseId { get; set; }        // Foreign key to Course
     public decimal? Grade { get; set; }      // Nullable (not graded yet)
     public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
-    
+
+    // Add this new property
+    public int Year { get; set; } = DateTime.UtcNow.Year;  // Default to current year
+
+    // Soft delete flag
+    public bool IsArchived { get; set; } = false;
+
     // Navigation properties
     public Student Student { get; set; } = null!;
     public Course Course { get; set; } = null!;

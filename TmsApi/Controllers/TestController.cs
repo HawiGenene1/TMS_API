@@ -1,13 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TmsApi.Data;
+using TmsApi.Entities;
 using System.Linq;
 
 namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/test")]
-public class TestController(TmsDbContext context) : ControllerBase
+public class TestController(TmsDbContext context, IServiceProvider services) : ControllerBase
 {
     [HttpGet("deferred")]
     public IActionResult TestDeferred()
@@ -104,5 +105,138 @@ public class TestController(TmsDbContext context) : ControllerBase
             .ToListAsync();
 
         return Ok(courses);
+    }
+
+    // N+1 Problem Demonstration
+    [HttpGet("n-plus-one")]
+    public async Task<IActionResult> TestNPlusOne()
+    {
+        Console.WriteLine("\n🚨 RUNNING N+1 DEMONSTRATION...");
+        Console.WriteLine("This will show 1 + N queries in the log!");
+
+        // Load all students (1 query)
+        var students = await context.Students.AsNoTracking().ToListAsync();
+
+        Console.WriteLine($"\n✅ Loaded {students.Count} students");
+        Console.WriteLine("Now counting enrollments for each student...");
+
+        var results = new List<object>();
+
+        // For EACH student, query the database again (N queries)
+        foreach (var student in students)
+        {
+            var count = await context.Enrollments
+                .AsNoTracking()
+                .CountAsync(e => e.StudentId == student.Id);
+
+            results.Add(new
+            {
+                StudentName = student.Name,
+                EnrollmentCount = count
+            });
+
+            Console.WriteLine($"   {student.Name}: {count} enrollments");
+        }
+
+        Console.WriteLine($"\n✅ Total queries: {1 + students.Count}");
+        Console.WriteLine("Check the SQL log above!");
+        Console.WriteLine("This is the N+1 problem in action!\n");
+
+        return Ok(results);
+    }
+
+    // N+1 Fix: Single query with projection
+    [HttpGet("n-plus-one-fixed")]
+    public async Task<IActionResult> TestNPlusOneFixed()
+    {
+        Console.WriteLine("\n✅ RUNNING FIXED VERSION (Single Query)...");
+
+        // One query with projection
+        var results = await context.Students
+            .AsNoTracking()
+            .Select(s => new
+            {
+                StudentName = s.Name,
+                EnrollmentCount = s.Enrollments.Count  // EF translates to SQL subquery!
+            })
+            .ToListAsync();
+
+        foreach (var r in results)
+        {
+            Console.WriteLine($"   {r.StudentName}: {r.EnrollmentCount} enrollments");
+        }
+
+        Console.WriteLine("\n✅ Only 1 SQL query was executed!");
+        Console.WriteLine("Check the SQL log - it uses a subquery!");
+
+        return Ok(results);
+    }
+
+    // N+1 Fix: Use Include (LEFT JOIN)
+    [HttpGet("n-plus-one-include")]
+    public async Task<IActionResult> TestNPlusOneInclude()
+    {
+        Console.WriteLine("\n✅ USING INCLUDE (Single Query)...");
+
+        // One query with Include loads all related data
+        var students = await context.Students
+            .AsNoTracking()
+            .Include(s => s.Enrollments)  // Load all enrollments in one query
+            .ToListAsync();
+
+        foreach (var student in students)
+        {
+            Console.WriteLine($"   {student.Name}: {student.Enrollments.Count} enrollments");
+        }
+
+        Console.WriteLine("\n✅ Only 1 SQL query was executed!");
+        Console.WriteLine("Check the SQL log - it uses a LEFT JOIN!");
+
+        return Ok(students);
+    }
+
+    // Concurrency Token Test
+    [HttpGet("concurrency-test")]
+    public async Task<IActionResult> TestConcurrency()
+    {
+        try
+        {
+            // Get first student
+            var student = await context.Students.FindAsync(1);
+            if (student is null) return NotFound("Student with Id=1 not found.");
+
+            Console.WriteLine($"Original Name: {student.Name}, GPA: {student.GPA}");
+
+            // Update 1: Change name
+            student.Name = "Updated Name";
+            await context.SaveChangesAsync();
+            Console.WriteLine("✅ First update successful");
+
+            // Update 2: Change GPA (same context, same version — succeeds)
+            student.GPA = 4.0m;
+            await context.SaveChangesAsync();
+            Console.WriteLine("✅ Second update successful");
+
+            // Simulate conflict: get a fresh context with a new copy of the student
+            using var freshContext = services.GetRequiredService<TmsDbContext>();
+            var freshStudent = await freshContext.Students.FindAsync(1);
+            freshStudent!.Name = "Fresh Update";
+            await freshContext.SaveChangesAsync();
+            Console.WriteLine("✅ Fresh context update successful (version now incremented)");
+
+            // Now try to save with the stale original context — version mismatch!
+            student.Name = "Outdated Update";
+            await context.SaveChangesAsync();  // ❌ THROWS DbUpdateConcurrencyException!
+
+            return Ok("Test passed!");
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            return BadRequest(new
+            {
+                Message = "Concurrency conflict detected! ✅ This is expected.",
+                Error = ex.Message
+            });
+        }
     }
 }

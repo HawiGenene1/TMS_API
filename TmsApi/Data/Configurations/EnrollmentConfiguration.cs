@@ -22,6 +22,17 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.Property(e => e.Grade)
             .HasPrecision(3, 2);  // Like 4.00, 3.50
 
+        builder.Property(e => e.Year)
+            .IsRequired()
+            .HasDefaultValue(DateTime.UtcNow.Year);
+
+        builder.Property(e => e.IsArchived)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        // Global query filter: archived enrollments are hidden from all queries
+        builder.HasQueryFilter(e => !e.IsArchived);
+
         builder.Property(e => e.EnrolledAt)
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
