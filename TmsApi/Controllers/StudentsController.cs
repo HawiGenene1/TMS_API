@@ -39,4 +39,47 @@ public class StudentsController(TmsDbContext context) : ControllerBase
             Students = students
         });
     }
+
+    // DELETE: api/students/1  (soft delete — marks as deleted, doesn't remove from DB)
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> SoftDeleteStudent(int id)
+    {
+        var student = await context.Students.FindAsync(id);
+        if (student == null)
+            return NotFound();
+
+        student.IsDeleted = true;
+        await context.SaveChangesAsync();
+
+        return Ok(new { Message = $"Student {student.Name} has been soft-deleted" });
+    }
+
+    // GET: api/students/admin/deleted  (admin only — see all soft-deleted students)
+    [HttpGet("admin/deleted")]
+    public async Task<IActionResult> GetDeletedStudents()
+    {
+        var deleted = await context.Students
+            .IgnoreQueryFilters()       // Bypass the soft-delete filter
+            .Where(s => s.IsDeleted)
+            .ToListAsync();
+
+        return Ok(deleted);
+    }
+
+    // POST: api/students/admin/restore/1  (admin only — restore a soft-deleted student)
+    [HttpPost("admin/restore/{id}")]
+    public async Task<IActionResult> RestoreStudent(int id)
+    {
+        var student = await context.Students
+            .IgnoreQueryFilters()       // Need this to find deleted students
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (student == null)
+            return NotFound();
+
+        student.IsDeleted = false;
+        await context.SaveChangesAsync();
+
+        return Ok(new { Message = $"Student {student.Name} has been restored" });
+    }
 }

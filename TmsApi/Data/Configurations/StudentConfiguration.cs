@@ -31,5 +31,16 @@ public class StudentConfiguration : IEntityTypeConfiguration<Student>
             .IsUnique();            // No two students can have same registration number
 
         builder.HasIndex(s => s.Name);
+
+        // Shadow property for audit — exists in DB but not in the C# entity class
+        builder.Property<DateTime>("LastUpdated")
+            .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // Concurrency token — EF Core checks this on every UPDATE
+        builder.Property(s => s.Version)
+            .IsRowVersion();
+
+        // Soft delete filter — excluded deleted students from ALL queries automatically
+        builder.HasQueryFilter(s => !s.IsDeleted);
     }
 }

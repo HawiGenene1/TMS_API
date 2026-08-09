@@ -7,7 +7,13 @@ public class Student
     public required string Name { get; set; }
     public decimal GPA { get; set; }
     public bool IsActive { get; set; } = true;
-    
+
+    // Concurrency token — auto-incremented by the DB on every update
+    public uint Version { get; set; }
+
+    // Soft delete flag — record stays in DB but is hidden from queries
+    public bool IsDeleted { get; set; } = false;
+
     // Navigation - A student has many enrollments
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
 

@@ -18,4 +18,10 @@ public class TmsDbContext(DbContextOptions<TmsDbContext> options)
         // ✅ Automatically picks up all IEntityTypeConfiguration classes in this assembly
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TmsDbContext).Assembly);
     }
+
+    // Helper: stamp the shadow audit property before saving
+    public void UpdateAuditStamps(Student student)
+    {
+        Entry(student).Property("LastUpdated").CurrentValue = DateTime.UtcNow;
+    }
 }
