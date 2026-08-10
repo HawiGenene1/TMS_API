@@ -1,46 +1,44 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TmsApi.Data;
+using TmsApi.Dtos;
+using TmsApi.Services;
 
 namespace TmsApi.Controllers;
 
 [ApiController]
 [Route("api/courses")]
-public class CoursesController(TmsDbContext context) : ControllerBase
+public class CoursesController : ControllerBase
 {
-    // GET: api/courses/top-enrollments
-    [HttpGet("top-enrollments")]
-    public async Task<IActionResult> GetTopCourses()
-    {
-        var topCourses = await context.Courses
-            .Select(c => new
-            {
-                c.Title,
-                EnrollmentCount = c.Enrollments.Count
-            })
-            .OrderByDescending(x => x.EnrollmentCount)  // Most popular first
-            .Take(5)  // Only top 5
-            .ToListAsync();
+    private readonly ICourseService _courseService;
 
-        return Ok(topCourses);
+    public CoursesController(ICourseService courseService)
+    {
+        _courseService = courseService;
     }
 
-    // POST: api/courses/archive-old
-    // Bulk archive enrollments older than 2025 — one SQL UPDATE, no loading into memory
-    [HttpPost("archive-old")]
-    public async Task<IActionResult> ArchiveOldEnrollments()
+    [HttpGet("{id:int}", Name = nameof(GetCourseById))]
+    public async Task<IActionResult> GetCourseById(int id, CancellationToken ct)
     {
-        var cutoffDate = new DateTime(2025, 12, 31);
+        var course = await _courseService.GetByIdAsync(id, ct);
+        return course is not null ? Ok(course) : NotFound();
+    }
 
-        var count = await context.Enrollments
-            .Where(e => e.EnrolledAt < cutoffDate && !e.IsArchived)
-            .ExecuteUpdateAsync(e => e.SetProperty(x => x.IsArchived, true));
-
-        return Ok(new
+    [HttpPost]
+    public async Task<IActionResult> CreateCourse(CreateCourseRequest request, CancellationToken ct)
+    {
+        // Check for duplicate code before saving
+        if (await _courseService.CodeExistsAsync(request.Code, ct))
         {
-            Message = $"Archived {count} enrollments",
-            CutoffDate = cutoffDate,
-            ArchivedCount = count
-        });
+            return Conflict(new ProblemDetails
+            {
+                Title = "Course code already exists",
+                Detail = $"A course with code '{request.Code}' is already registered.",
+                Status = StatusCodes.Status409Conflict
+            });
+        }
+
+        var result = await _courseService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetCourseById),
+            new { id = result.Id },
+            result);
     }
 }
