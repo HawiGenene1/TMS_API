@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TmsApi.Service;
+using TmsApi.Services;
 using TmsApi.Configuration;
 using TmsApi.Data;
 using TmsApi.Entities;
@@ -18,6 +19,8 @@ builder.Services.AddControllers();
 builder.Services.AddSingleton<EnrollmentWorker>();
 
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+
+builder.Services.AddScoped<ICourseService, CourseService>();
 
 builder.Services.AddOptions<PaymentOptions>()
     .BindConfiguration("Payments")
@@ -104,9 +107,9 @@ using (var scope = app.Services.CreateScope())
         // Create 3 courses
         var courses = new List<Course>
         {
-            new() { Code = "CS-101",  Title = "Introduction to Computer Science", Capacity = 30 },
-            new() { Code = "CS-201",  Title = "Data Structures and Algorithms",   Capacity = 25 },
-            new() { Code = "MAT-101", Title = "Calculus I",                       Capacity = 40 }
+            new() { Code = "CS-101",  Title = "Introduction to Computer Science", MaxCapacity = 30 },
+            new() { Code = "CS-201",  Title = "Data Structures and Algorithms",   MaxCapacity = 25 },
+            new() { Code = "MAT-101", Title = "Calculus I",                       MaxCapacity = 40 }
         };
         context.Courses.AddRange(courses);
         context.SaveChanges();

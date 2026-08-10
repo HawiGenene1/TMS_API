@@ -1,80 +1,57 @@
 using Microsoft.AspNetCore.Mvc;
+using TmsApi.Dtos;
 using TmsApi.Service;
+using TmsApi.Services;
 
 namespace TmsApi.Controllers;
 
 [ApiController]
-[Route("api/enrollments")]
+[Route("api/courses/{courseId:int}/enrollments")]
 public class EnrollmentsController : ControllerBase
 {
+    private readonly ICourseService _courseService;
     private readonly IEnrollmentService _enrollmentService;
 
-    public EnrollmentsController(IEnrollmentService enrollmentService)
+    public EnrollmentsController(ICourseService courseService, IEnrollmentService enrollmentService)
     {
+        _courseService = courseService;
         _enrollmentService = enrollmentService;
     }
 
-    // GET: /api/enrollments
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+    // GET: api/courses/{courseId}/enrollments/{id}
+    [HttpGet("{id:int}", Name = nameof(GetEnrollment))]
+    public async Task<IActionResult> GetEnrollment(int courseId, int id, CancellationToken ct)
     {
-        var enrollments = await _enrollmentService.GetAllAsync();
-        return Ok(enrollments);
+        var enrollment = await _enrollmentService.GetByIdAsync(courseId, id, ct);
+        return enrollment is not null ? Ok(enrollment) : NotFound();
     }
 
-    // GET: /api/enrollments/{id}
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(string id)
+    // POST: api/courses/{courseId}/enrollments
+    [HttpPost]
+    public async Task<IActionResult> EnrollStudent(int courseId, EnrollStudentRequest request, CancellationToken ct)
     {
-        var record = await _enrollmentService.GetByIdAsync(id);
+        // Step 1: Check if course exists
+        var course = await _courseService.GetByIdAsync(courseId, ct);
+        if (course is null)
+            return NotFound();
 
-     if (record == null)
-{
-    return NotFound(new ProblemDetails
-    {
-        Title = "Enrollment not found",
-        Detail = $"No enrollment exists with id '{id}'.",
-        Status = StatusCodes.Status404NotFound
-    });
-}
-        return Ok(record);
+        // Step 2: Check if course is full
+        if (course.EnrollmentCount >= course.MaxCapacity)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Course is full",
+                Detail = $"Course '{course.Title}' has reached its maximum capacity of {course.MaxCapacity}.",
+                Status = StatusCodes.Status409Conflict
+            });
+        }
+
+        // Step 3: Enroll the student
+        var result = await _enrollmentService.CreateAsync(courseId, request, ct);
+
+        return CreatedAtAction(
+            nameof(GetEnrollment),
+            new { courseId, id = result.Id },
+            result);
     }
-
-    // POST: /api/enrollments
-[HttpPost]
-public async Task<IActionResult> Create([FromBody] CreateEnrollmentRequest request)
-{
-    var record = await _enrollmentService.EnrollAsync(
-        request.StudentId,
-        request.CourseCode);
-
-    return CreatedAtAction(
-        nameof(GetById),
-        new { id = record.Id },
-        record);
 }
-
-// DELETE: /api/enrollments/{id}
-[HttpDelete("{id}")]
-public async Task<IActionResult> Delete(string id)
-{
-    var deleted = await _enrollmentService.DeleteAsync(id);
-
-   if (!deleted)
-{
-    return NotFound(new ProblemDetails
-    {
-        Title = "Enrollment not found",
-        Detail = $"No enrollment exists with id '{id}'.",
-        Status = StatusCodes.Status404NotFound
-    });
-}
-    return NoContent();
-}
-}
-
-
-public record CreateEnrollmentRequest(
-    string StudentId,
-    string CourseCode
-);
