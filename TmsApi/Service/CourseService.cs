@@ -16,6 +16,54 @@ public class CourseService : ICourseService
         _logger = logger;
     }
 
+    public async Task<PagedResponse<CourseResponseDto>> GetCoursesAsync(PageRequest request, CancellationToken ct)
+    {
+        // STEP 1: Start with query (no tracking for reads)
+        IQueryable<Course> query = _context.Courses.AsNoTracking();
+
+        // STEP 2: Apply search filter (if provided)
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            query = query.Where(c =>
+                EF.Functions.ILike(c.Title, $"%{request.Search}%") ||
+                EF.Functions.ILike(c.Code, $"%{request.Search}%"));
+        }
+
+        // STEP 3: Count TOTAL before pagination!
+        // Runs: SELECT COUNT(*) FROM "Courses" WHERE ...
+        var totalCount = await query.CountAsync(ct);
+
+        // STEP 4: Apply sorting
+        query = request.OrderBy.ToLower() switch
+        {
+            "code"        => request.Descending ? query.OrderByDescending(c => c.Code)        : query.OrderBy(c => c.Code),
+            "maxcapacity" => request.Descending ? query.OrderByDescending(c => c.MaxCapacity) : query.OrderBy(c => c.MaxCapacity),
+            // Default: order by Title
+            _             => request.Descending ? query.OrderByDescending(c => c.Title)       : query.OrderBy(c => c.Title)
+        };
+
+        // STEP 5: Apply pagination and project
+        var items = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(c => new CourseResponseDto(
+                c.Id,
+                c.Code,
+                c.Title,
+                c.MaxCapacity,
+                c.Enrollments.Count))
+            .ToListAsync(ct);
+
+        // STEP 6: Return paged response
+        return new PagedResponse<CourseResponseDto>
+        {
+            Items      = items,
+            TotalCount = totalCount,
+            Page       = request.Page,
+            PageSize   = request.PageSize
+        };
+    }
+
     public async Task<CourseResponseDto?> GetByIdAsync(int id, CancellationToken ct)
     {
         return await _context.Courses
