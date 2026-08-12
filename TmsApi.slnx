@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/TmsApi/">
+    <Project Path="TmsApi/TmsApi.Api/TmsApi.Api.csproj" />
+    <Project Path="TmsApi/TmsApi.Application/TmsApi.Application.csproj" />
+    <Project Path="TmsApi/TmsApi.Domain/TmsApi.Domain.csproj" />
+    <Project Path="TmsApi/TmsApi.Infrastructure/TmsApi.Infrastructure.csproj" />
+  </Folder>
+</Solution>
