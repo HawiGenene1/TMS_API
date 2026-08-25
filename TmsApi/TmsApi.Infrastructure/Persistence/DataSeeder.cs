@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using TmsApi.Domain.Entities;
 
 namespace TmsApi.Infrastructure.Persistence;
@@ -36,7 +37,11 @@ public static class DataSeeder
 
     public static async Task SeedAsync(TmsDbContext context, CancellationToken ct = default)
     {
-        await context.Database.MigrateAsync(ct);
+        var pending = await context.Database.GetPendingMigrationsAsync(ct);
+        if (pending.Any())
+        {
+            await context.Database.MigrateAsync(ct);
+        }
 
         if (await context.Courses.AnyAsync(ct))
             return;
